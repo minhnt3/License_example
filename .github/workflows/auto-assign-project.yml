@@ -1,36 +1,26 @@
 name: Auto Assign Project to New Issues
 
-# Khi nào workflow sẽ chạy
 on:
   issues:
-    types: [opened]  # Chỉ chạy khi issue được tạo mới
+    types: [opened]
 
 jobs:
   assign-project:
     runs-on: ubuntu-latest
     steps:
-      # Sử dụng GitHub official action để tương tác với issues
       - name: Assign new issue to project
         uses: actions/github-script@v7
         with:
           script: |
-            // ID của project (cần thay đổi theo project của bạn)
-            const projectId = '1';  // Thay bằng ID project thực tế
+            const projectId = '1';
             
-            // Lấy thông tin về issue vừa tạo
             const issue = context.payload.issue;
             
-            // Thêm issue vào project
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issue.number,
               body: `This issue has been added to project #${projectId}`
             });
-            # await github.rest.projects.createCard({
-            #   project_id: projectId,
-            #   content_id: issue.id,
-            #   content_type: 'Issue'
-            # });
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
