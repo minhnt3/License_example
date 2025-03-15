@@ -16,11 +16,10 @@ jobs:
             
             const issue = context.payload.issue;
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.number,
-              body: `This issue has been added to project #${projectId}`
+            await github.rest.projects.createCard({
+               project_id: projectId,
+               content_id: issue.id,
+               content_type: 'Issue'
             });
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
