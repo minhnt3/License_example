@@ -16,3 +16,4 @@ jobs:
       if: github.event.action == 'opened'
       with:
         project: 'https://github.com/users/minhnt3/projects/1'
+        column_name: 'No Status'
