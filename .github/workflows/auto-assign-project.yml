@@ -5,21 +5,11 @@ on:
     types: [opened]
 
 jobs:
-  assign-project:
+  add-issue:
     runs-on: ubuntu-latest
     steps:
-      - name: Assign new issue to project
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const projectId = '1';
-            
-            const issue = context.payload.issue;
-            
-            await github.rest.projects.createCard({
-               project_id: projectId,
-               content_id: issue.id,
-               content_type: 'Issue'
-            });
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v2
+    - name: Add Issue
+      run: |
+        echo "Adding issue to repository..."
+        cat ISSUE_TEMPLATE.md >> $GITHUB_EVENT_PATH
