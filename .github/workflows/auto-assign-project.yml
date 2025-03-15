@@ -1,15 +1,18 @@
-name: Auto Assign Project to New Issues
+name: Auto Assign to Project(s)
 
 on:
   issues:
     types: [opened]
+env:
+  MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
 
 jobs:
-  add-issue:
+  assign_one_project:
     runs-on: ubuntu-latest
+    name: Assign to One Project
     steps:
-    - uses: actions/checkout@v2
-    - name: Add Issue
-      run: |
-        echo "Adding issue to repository..."
-        cat ISSUE_TEMPLATE.md >> $GITHUB_EVENT_PATH
+    - name: Assign NEW issues and NEW pull requests to project 2
+      uses: srggrs/assign-one-project-github-action@1.2.1
+      if: github.event.action == 'opened'
+      with:
+        project: 'https://github.com/users/minhnt3/projects/1'
