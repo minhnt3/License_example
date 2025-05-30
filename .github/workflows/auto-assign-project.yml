@@ -1,19 +1,34 @@
 name: Auto Assign to Project(s)
 
 on:
-  issues:
-    types: [opened]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
 env:
   MY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  assign_one_project:
+  check-conventions:
     runs-on: ubuntu-latest
-    name: Assign to One Project
+
     steps:
-    - name: Assign NEW issues and NEW pull requests to project 2
-      uses: srggrs/assign-one-project-github-action@1.2.1
-      if: github.event.action == 'opened'
-      with:
-        project: 'https://github.com/users/minhnt3/projects/1'
-        column_name: 'No Status'
+      - name: 🔍 Check PR title
+        run: |
+          echo "🔎 Checking PR title: ${{ github.event.pull_request.title }}"
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor|test|style):\ .+ ]]; then
+            echo "❌ Invalid PR title convention: '$TITLE'"
+            echo "✅ Expected format: 'feat: something here'"
+            exit 1
+          fi
+          echo "✅ PR title is valid."
+
+      - name: 🔍 Check branch name
+        run: |
+          echo "🔎 Checking branch name: ${{ github.head_ref }}"
+          BRANCH="${{ github.head_ref }}"
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|hotfix)\/[0-9]+(_[0-9]+)?$|^v\.\d+\.\d+\.\d+$ ]]; then
+            echo "❌ Invalid branch name convention: '$BRANCH'"
+            echo "✅ Expected format: 'feat/1234'"
+            exit 1
+          fi
+          echo "✅ Branch name is valid."
