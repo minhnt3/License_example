@@ -1,0 +1,21 @@
+name: Check Branch Name Convention
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check-conventions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔍 Check branch name
+        run: |
+          echo "🔎 Checking branch name: ${{ github.head_ref }}"
+          BRANCH="${{ github.head_ref }}"
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|hotfix)\/[0-9]+(_[0-9]+)?$|^v\.\d+\.\d+\.\d+$ ]]; then
+            echo "❌ Invalid branch name convention: '$BRANCH'"
+            echo "✅ Expected format: 'feat/1234'"
+            exit 1
+          fi
+          echo "✅ Branch name is valid."
