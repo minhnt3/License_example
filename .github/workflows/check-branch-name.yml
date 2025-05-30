@@ -2,7 +2,7 @@ name: Check Branch Name Convention
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened]
 
 jobs:
   check-conventions:
