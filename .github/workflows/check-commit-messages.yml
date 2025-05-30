@@ -16,7 +16,7 @@ jobs:
 
       - name: 🔍 Validate commit messages
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" HEAD~1)
           echo "🔎 Latest commit: $COMMIT_MSG"
 
           if [[ ! "$COMMIT_MSG" =~ ^(feat|fix|chore|refactor|package):\ .+ ]]; then
