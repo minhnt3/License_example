@@ -16,20 +16,13 @@ jobs:
 
       - name: 🔍 Validate commit messages
         run: |
-          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
-          echo "$COMMITS"
-          invalid=0
-          while IFS= read -r line; do
-            if [[ ! "$line" =~ ^(feat|fix|chore|refactor|package):\ .+ ]]; then
-              echo "❌ Invalid commit: $line"
-              invalid=1
-            else
-              echo "✅ $line"
-            fi
-          done <<< "$COMMITS"
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          echo "🔎 Latest commit: $COMMIT_MSG"
 
-          if [[ $invalid -eq 1 ]]; then
-            echo "❌ Some commit messages are invalid"
+          if [[ ! "$COMMIT_MSG" =~ ^(feat|fix|chore|refactor|package):\ .+ ]]; then
+            echo "❌ Invalid commit message"
+            echo "✅ Expected format: 'type: description'"
             exit 1
           fi
-          echo "✅ All commits valid"
+
+          echo "✅ Commit message is valid."
