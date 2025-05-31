@@ -18,21 +18,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🔍 Get commit messages
-        id: commits
+      - name: 🔍 Get diff between branches
+        id: diff
         run: |
-          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
-          echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD --unified=0)
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: 🤖 Ask OpenAI to summarize commits
+      - name: 🤖 Ask OpenAI to summarize the PR
         id: summary
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "Asking GPT to summarize the following commits:"
-          echo "${{ steps.commits.outputs.commits }}"
+          echo "Asking GPT to summarize the PR:"
+          echo "${{ steps.diff.outputs.diff }}"
 
           SUMMARY=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
@@ -40,8 +40,8 @@ jobs:
             -d '{
               "model": "gpt-4",
               "messages": [
-                {"role": "system", "content": "You are a software engineer. Summarize git commit messages into clear bullet points for a changelog."},
-                {"role": "user", "content": "Summarize the following commits:\n'"${{ steps.commits.outputs.commits }}"'"}
+                {"role": "system", "content": "You are a software engineer. Summarize the PR into clear bullet points for a changelog."},
+                {"role": "user", "content": "Summarize the PR:\n'"${{ steps.diff.outputs.diff }}"'"}
               ],
               "temperature": 0.5
             }' | jq -r '.choices[0].message.content')
