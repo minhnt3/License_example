@@ -3,7 +3,9 @@ name: Check PR Assignee
 on:
   pull_request:
     types: [opened, edited]
-
+  pull_request_target:
+    types: [assigned, unassigned]
+    
 jobs:
   check-assignee:
     runs-on: ubuntu-latest
