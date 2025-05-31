@@ -1,66 +1,116 @@
-name: Update Project Status on PR
+name: Update Project Status
 
 on:
   pull_request:
-    types: [opened, closed, synchronize]
-
+    types: [opened, closed]
 
 jobs:
   update-project-status:
+    if: |
+      github.event_name == 'pull_request' &&
+      (
+        github.event.action == 'opened' ||
+        (github.event.action == 'closed' && github.event.pull_request.merged == true)
+      )
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true || github.event.action == 'opened' || github.event.action == 'synchronize'
+
     env:
       GITHUB_TOKEN: ${{ secrets.PROJECT_PAT }}
-    
-    steps:
-      - name: 🔐 Set GraphQL Token
-        run: echo "GRAPHQL_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
-      - name: 🔍 Extract Issue Numbers from PR body
+    steps:
+      - name: 👀 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔍 Extract Issue Numbers from PR Description
         id: extract
         run: |
-          ISSUE_BLOCK=$(echo "${{ github.event.pull_request.body }}" | awk '/^## Issue/{flag=1;next}/^##/{flag=0}flag')
-          NUMBERS=$(echo "$ISSUE_BLOCK" | grep -oE '#[0-9]+' | sed 's/#//g' | tr '\n' ',' | sed 's/,$//')
-          echo "issues=$NUMBERS" >> $GITHUB_OUTPUT
+          ISSUE_LINE=$(echo "${{ github.event.pull_request.body }}" | awk '/## Issue/{flag=1;next}/##/{flag=0}flag')
+          echo "Found issue line: $ISSUE_LINE"
+          ISSUES=$(echo "$ISSUE_LINE" | grep -oE '#[0-9]+' | tr -d '#')
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
 
-      - name: 🔁 Update Status in Project (GraphQL)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 🔄 Update status to 'Code Review' on PR open
+        if: github.event.action == 'opened'
         run: |
-          IFS=',' read -ra ISSUE_IDS <<< "${{ steps.extract.outputs.issues }}"
+          PROJECT_ID="PVT_kwHOBZLEic4A6UIE"
+          FIELD_ID="PVTSSF_lAHOBZLEic4A6UIEzgu8fD0"
+          OPTION_ID="34aa8716"
 
-          for ISSUE_NUMBER in "${ISSUE_IDS[@]}"; do
-            echo "Fetching content ID for issue #$ISSUE_NUMBER..."
-
-            CONTENT_ID=$(gh api graphql -f query='
-              query($owner:String!, $repo:String!, $issue:Int!) {
-                repository(owner: $owner, name: $repo) {
-                  issue(number: $issue) {
-                    id
-                  }
-                }
-              }' -f owner="${{ github.repository_owner }}" -f repo="${{ github.event.repository.name }}" -F issue=$ISSUE_NUMBER --jq '.data.repository.issue.id')
-
-            echo "Content ID: $CONTENT_ID"
-
-            echo "Updating Project status..."
-
-            # Replace the following with your actual project/field/option IDs
-            gh api graphql -f query='
-              mutation {
-                updateProjectV2ItemFieldValue(
-                  input: {
-                    projectId: "PVT_kwHOBZLEic4A6UIE",
-                    itemId: "'$CONTENT_ID'",
-                    fieldId: "PVTSSF_lAHOBZLEic4A6UIEzgu8fD0",
-                    value: {
-                      singleSelectOptionId: "34aa8716"
+          for issue in ${{ steps.extract.outputs.issues }}; do
+            ITEM_ID=$(gh api graphql -f query=""
+            {
+              node(id: \"$PROJECT_ID\") {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                        }
+                      }
                     }
                   }
-                ) {
-                  projectV2Item {
-                    id
+                }
+              }
+            }
+            "" | jq -r ".data.node.items.nodes[] | select(.content.number == $issue) | .id")
+
+            echo "Updating issue #$issue (itemId: $ITEM_ID) to Code Review..."
+
+            gh api graphql -f query='mutation {
+              updateProjectV2ItemFieldValue(
+                input: {
+                  projectId: "'$PROJECT_ID'"
+                  itemId: "'$ITEM_ID'"
+                  fieldId: "'$FIELD_ID'"
+                  value: { singleSelectOptionId: "'$OPTION_ID'" }
+                }
+              ) {
+                clientMutationId
+              }
+            }'
+          done
+
+      - name: ✅ Update status to 'Done' on PR merge
+        if: github.event.pull_request.merged == true
+        run: |
+          PROJECT_ID="PVT_kwHOBZLEic4A6UIE"
+          FIELD_ID="PVTSSF_lAHOBZLEic4A6UIEzgu8fD0"
+          OPTION_ID="98236657"
+
+          for issue in ${{ steps.extract.outputs.issues }}; do
+            ITEM_ID=$(gh api graphql -f query=""
+            {
+              node(id: \"$PROJECT_ID\") {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                        }
+                      }
+                    }
                   }
                 }
-              }'
+              }
+            }
+            "" | jq -r ".data.node.items.nodes[] | select(.content.number == $issue) | .id")
+
+            echo "Updating issue #$issue (itemId: $ITEM_ID) to Done..."
+
+            gh api graphql -f query='mutation {
+              updateProjectV2ItemFieldValue(
+                input: {
+                  projectId: "'$PROJECT_ID'"
+                  itemId: "'$ITEM_ID'"
+                  fieldId: "'$FIELD_ID'"
+                  value: { singleSelectOptionId: "'$OPTION_ID'" }
+                }
+              ) {
+                clientMutationId
+              }
+            }'
           done
