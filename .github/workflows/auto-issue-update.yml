@@ -4,11 +4,14 @@ on:
   pull_request:
     types: [opened, closed, synchronize]
 
+
 jobs:
   update-project-status:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true || github.event.action == 'opened' || github.event.action == 'synchronize'
-
+    env:
+      GITHUB_TOKEN: ${{ secrets.PROJECT_PAT }}
+    
     steps:
       - name: 🔐 Set GraphQL Token
         run: echo "GRAPHQL_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
