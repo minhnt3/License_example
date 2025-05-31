@@ -2,7 +2,7 @@ name: Update Project Status
 
 on:
   pull_request:
-    types: [opened, closed, reopened, synchronize]
+    types: [opened, closed, reopened, synchronize, edited]
 
 jobs:
   update-project-status:
