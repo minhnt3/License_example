@@ -2,16 +2,11 @@ name: Update Project Status
 
 on:
   pull_request:
-    types: [opened, closed]
+    types: [opened, closed, reopened, synchronize]
 
 jobs:
   update-project-status:
-    if: |
-      github.event_name == 'pull_request' &&
-      (
-        github.event.action == 'opened' ||
-        (github.event.action == 'closed' && github.event.pull_request.merged == true)
-      )
+    
     runs-on: ubuntu-latest
 
     env:
