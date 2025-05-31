@@ -25,7 +25,6 @@ jobs:
           echo "issues=$ISSUES" >> $GITHUB_OUTPUT
 
       - name: 🔄 Update status to 'Code Review' on PR open
-        if: github.event.action == 'opened'
         run: |
           PROJECT_ID="PVT_kwHOBZLEic4A6UIE"
           FIELD_ID="PVTSSF_lAHOBZLEic4A6UIEzgu8fD0"
