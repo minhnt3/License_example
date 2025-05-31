@@ -1,4 +1,4 @@
-name: 🔍 Check Latest Commit Message
+name: Check Latest Commit Message
 
 on:
   pull_request:
