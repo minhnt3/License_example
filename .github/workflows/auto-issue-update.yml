@@ -1,61 +1,63 @@
-name: Sync Issue Status with PR
+name: 🔁 Update Project Status on PR
 
 on:
   pull_request:
-    types: [opened, edited, closed]
+    types: [opened, closed]
 
 jobs:
-  sync-issues:
+  update-project-status:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged != false || github.event.action == 'opened' || github.event.action == 'edited'
-
-    permissions:
-      issues: write
-      pull-requests: read
+    if: github.event.pull_request.merged == true || github.event.action == 'opened'
 
     steps:
-      - name: 🧠 Extract Issue Numbers from PR Description
+      - name: 🔐 Set GraphQL Token
+        run: echo "GRAPHQL_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+
+      - name: 🔍 Extract Issue Numbers from PR body
         id: extract
         run: |
-          echo "PR Body:"
-          echo "${{ github.event.pull_request.body }}"
-
-          # Extract only the block under '## Issue'
           ISSUE_BLOCK=$(echo "${{ github.event.pull_request.body }}" | awk '/^## Issue/{flag=1;next}/^##/{flag=0}flag')
-          
-          echo "Issue block content:"
-          echo "$ISSUE_BLOCK"
-
-          # Extract issue numbers starting with #
           NUMBERS=$(echo "$ISSUE_BLOCK" | grep -oE '#[0-9]+' | sed 's/#//g' | tr '\n' ',' | sed 's/,$//')
           echo "issues=$NUMBERS" >> $GITHUB_OUTPUT
 
-      - name: 📝 Set Issue Status to 'Code Review' when PR is opened or edited
-        if: github.event.action == 'opened' || github.event.action == 'edited'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issues = '${{ steps.extract.outputs.issues }}'.split(',').filter(Boolean);
-            for (const number of issues) {
-              await github.rest.issues.createComment({
-                issue_number: parseInt(number),
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: '🔄 This issue is currently in **Code Review** via PR #' + context.payload.pull_request.number
-              });
-            }
+      - name: 🔁 Update Status in Project (GraphQL)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IFS=',' read -ra ISSUE_IDS <<< "${{ steps.extract.outputs.issues }}"
 
-      - name: ✅ Close Issues When PR Is Merged
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issues = '${{ steps.extract.outputs.issues }}'.split(',').filter(Boolean);
-            for (const number of issues) {
-              await github.rest.issues.update({
-                issue_number: parseInt(number),
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                state: 'closed'
-              });
-            }
+          for ISSUE_NUMBER in "${ISSUE_IDS[@]}"; do
+            echo "Fetching content ID for issue #$ISSUE_NUMBER..."
+
+            CONTENT_ID=$(gh api graphql -f query='
+              query($owner:String!, $repo:String!, $issue:Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $issue) {
+                    id
+                  }
+                }
+              }' -f owner="${{ github.repository_owner }}" -f repo="${{ github.event.repository.name }}" -F issue=$ISSUE_NUMBER --jq '.data.repository.issue.id')
+
+            echo "Content ID: $CONTENT_ID"
+
+            echo "Updating Project status..."
+
+            # Replace the following with your actual project/field/option IDs
+            gh api graphql -f query='
+              mutation {
+                updateProjectV2ItemFieldValue(
+                  input: {
+                    projectId: "PVT_kwHOBZLEic4A6UIE",
+                    itemId: "'$CONTENT_ID'",
+                    fieldId: "PVTSSF_lAHOBZLEic4A6UIEzgu8fD0",
+                    value: {
+                      singleSelectOptionId: "34aa8716"
+                    }
+                  }
+                ) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }'
+          done
