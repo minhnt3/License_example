@@ -1,4 +1,4 @@
-name: List All PR Comments and Count Mentions
+name: List Root PR Comments and Check Mentions
 
 on:
   pull_request:
@@ -8,42 +8,42 @@ jobs:
   list-comments:
     runs-on: ubuntu-latest
     steps:
-      - name: Get all review comments (code-specific) and count mentions
+      - name: 📥 Get review comments and count
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
           echo "Fetching review comments for PR #$PR_NUMBER..."
 
-          # Get review comments only
+          # Fetch all code review comments
           gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
             --paginate \
-            --jq '
-              map({
-                author: .user.login,
-                body: .body,
-                path: .path,
-                line: .line,
-                in_reply_to_id: .in_reply_to_id
-              })
-            ' > raw_comments.json
+            > all_comments.json
 
-          # Save human-readable version
+          # Filter to only root comments (not replies)
+          jq '[.[] | select(.in_reply_to_id == null)]' all_comments.json > root_comments.json
+
+          # Count root comments
+          ROOT_COUNT=$(jq length root_comments.json)
+          echo "🔢 Total Root Review Comments: $ROOT_COUNT"
+
+          # Count @minhnt3 mentions in ALL comments (including replies)
+          MENTION_COUNT=$(jq '[.[] | select(.body | test("@minhnt3"))] | length' all_comments.json)
+          echo "🔁 Number of @minhnt3 mentions: $MENTION_COUNT"
+
+          # Output detailed list (optional)
+          echo "=== Root Comments ==="
           jq -r '.[] |
-            "- Author: \(.author)
+            "- Author: \(.user.login)
                File: \(.path)
                Line: \(.line)
-               In-Reply-To: \(.in_reply_to_id // "None")
                Comment: \(.body)\n"
-          ' raw_comments.json > review_comments.txt
+          ' root_comments.json
 
-          echo "=== Review Comments ==="
-          cat review_comments.txt
-
-          # Count total comments
-          TOTAL_COMMENTS=$(jq length raw_comments.json)
-          echo "🔢 Total Review Comments: $TOTAL_COMMENTS"
-
-          # Count mentions of @minhnt3
-          MENTION_COUNT=$(jq '[.[] | select(.body | test("@minhnt3"))] | length' raw_comments.json)
-          echo "🔁 Number of @minhnt3 mentions: $MENTION_COUNT"
+          # Fail or pass CI based on condition
+          if [ "$MENTION_COUNT" -lt "$ROOT_COUNT" ]; then
+            echo "❌ Not enough @minhnt3 mentions for review comments."
+            exit 1
+          else
+            echo "✅ All root comments are mentioned appropriately."
+          fi
