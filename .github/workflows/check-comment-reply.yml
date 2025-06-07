@@ -19,28 +19,47 @@ jobs:
           REPO=${{ github.repository }}
           MENTION_PATTERN="@${REVIEWER_USERNAME}"
 
-          # Lấy PR author
+          echo "🔍 Getting PR info..."
           PR_AUTHOR=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.user.login')
           echo "👤 PR Author: $PR_AUTHOR"
 
-          # Lấy tất cả review comments
+          echo "📥 Fetching all review comments..."
           gh api repos/$REPO/pulls/$PR_NUMBER/comments \
-            --paginate \
-            > all_comments.json
+            --paginate > all_comments.json
 
-          # Lọc comment gốc KHÔNG phải từ PR author
+          echo "🧾 Filtering root comments (excluding PR author)..."
           jq --arg author "$PR_AUTHOR" '[.[] | select(.in_reply_to_id == null and .user.login != $author)]' all_comments.json > root_comments.json
           ROOT_COUNT=$(jq length root_comments.json)
           echo "🔢 Total Root Review Comments (excluding PR author): $ROOT_COUNT"
 
-          # Đếm số lần mention reviewer
-          MENTION_COUNT=$(jq --arg mention "$MENTION_PATTERN" '[.[] | select(.body | test($mention))] | length' all_comments.json)
-          echo "🔁 Number of $MENTION_PATTERN mentions: $MENTION_COUNT"
+          echo "🔁 Counting mentions of ${REVIEWER_USERNAME} in all replies..."
+          jq '[.[] | select(.in_reply_to_id != null and (.body | test("@'"$REVIEWER_USERNAME"'"; "i")))]' all_comments.json > replies_with_mentions.json
+          MENTION_COUNT=$(jq length replies_with_mentions.json)
+          echo "🔁 Number of @$REVIEWER_USERNAME mentions: $MENTION_COUNT"
 
-          # So sánh
+          echo "🔍 Checking fix/fixed replies for commit hash..."
+          FAIL=0
+          for row in $(jq -c '.[]' replies_with_mentions.json); do
+            BODY=$(echo "$row" | jq -r '.body')
+            if echo "$BODY" | grep -iE '\bfix(?:ed)?\b'; then
+              if ! echo "$BODY" | grep -E '\b[a-f0-9]{7,40}\b'; then
+                echo "❌ Missing commit hash in fix/fixed reply:"
+                echo "$BODY"
+                FAIL=1
+              fi
+            fi
+          done
+
+          echo "📊 Summary:"
+          echo "🧮 Root Comments: $ROOT_COUNT"
+          echo "💬 @${REVIEWER_USERNAME} Mentions: $MENTION_COUNT"
+
           if [ "$MENTION_COUNT" -lt "$ROOT_COUNT" ]; then
-            echo "❌ Not enough $MENTION_PATTERN mentions for $ROOT_COUNT root comments."
+            echo "❌ Not enough @${REVIEWER_USERNAME} mentions."
+            exit 1
+          elif [ "$FAIL" -eq 1 ]; then
+            echo "❌ Some fix/fixed replies are missing commit hashes."
             exit 1
           else
-            echo "✅ All root comments (excluding PR author) are properly mentioned."
+            echo "✅ All checks passed."
           fi
