@@ -1,0 +1,84 @@
+name: Check Issue Project Status
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  verify-issue-status:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+      PROJECT_ID: "PVT_kwHOBZLEic4A6UIE"        # Update this
+      FIELD_ID: "PVTSSF_lAHOBZLEic4A6UIEzgu8fD0"       # Update this
+      OPTION_ID_CODE_REVIEW: "34aa8716"             # Update this for "Code Review"
+
+    steps:
+      - name: 🔍 Extract Issue Numbers from PR Description
+        id: extract
+        run: |
+          ISSUE_LINE=$(echo "${{ github.event.pull_request.body }}" | awk '/## Issue/{flag=1;next}/##/{flag=0}flag')
+          echo "Found issue line: $ISSUE_LINE"
+          ISSUES=$(echo "$ISSUE_LINE" | grep -oE '#[0-9]+' | tr -d '#')
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+      - name: 🧪 Validate Issue Status = Code Review
+        run: |
+          PROJECT_ID="$PROJECT_ID"
+          FIELD_ID="$FIELD_ID"
+          OPTION_ID="$OPTION_ID_CODE_REVIEW"
+          FAILED=0
+
+          for issue in ${{ steps.extract.outputs.issues }}; do
+            ITEM_ID=$(gh api graphql -f query="
+            {
+              node(id: \"$PROJECT_ID\") {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }" | jq -r ".data.node.items.nodes[] | select(.content.number == $issue) | .id")
+
+            if [ -z "$ITEM_ID" ]; then
+              echo "❌ Issue #$issue not found in project"
+              FAILED=1
+              continue
+            fi
+
+            STATUS_OPTION_ID=$(gh api graphql -f query="
+            {
+              node(id: \"$PROJECT_ID\") {
+                ... on ProjectV2 {
+                  item(id: \"$ITEM_ID\") {
+                    fieldValueByName(name: \"Status\") {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        optionId
+                      }
+                    }
+                  }
+                }
+              }
+            }" | jq -r '.data.node.item.fieldValueByName.optionId')
+
+            if [ "$STATUS_OPTION_ID" != "$OPTION_ID" ]; then
+              echo "❌ Issue #$issue is not in 'Code Review'."
+              FAILED=1
+            else
+              echo "✅ Issue #$issue is in 'Code Review'"
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo "❗ One or more issues are not in the 'Code Review' status"
+            exit 1
+          fi
