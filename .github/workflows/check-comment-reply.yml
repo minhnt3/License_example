@@ -1,49 +1,42 @@
-name: List Root PR Comments and Check Mentions
+name: Check Review Comments and Mentions
 
 on:
   pull_request:
     types: [opened, edited, synchronize]
 
+env:
+  REVIEWER_USERNAME: "minhnt3"
+
 jobs:
-  list-comments:
+  check-review-comments:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Get review comments and count
+      - name: Fetch and check review comments
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
-          echo "Fetching review comments for PR #$PR_NUMBER..."
+          MENTION_PATTERN="@${REVIEWER_USERNAME}"
+          echo "🔍 Checking comments for @$REVIEWER_USERNAME..."
 
-          # Fetch all code review comments
+          # Fetch all review comments
           gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
             --paginate \
             > all_comments.json
 
-          # Filter to only root comments (not replies)
+          # Filter root comments (non-replies)
           jq '[.[] | select(.in_reply_to_id == null)]' all_comments.json > root_comments.json
-
-          # Count root comments
           ROOT_COUNT=$(jq length root_comments.json)
           echo "🔢 Total Root Review Comments: $ROOT_COUNT"
 
-          # Count @minhnt3 mentions in ALL comments (including replies)
-          MENTION_COUNT=$(jq '[.[] | select(.body | test("@minhnt3"))] | length' all_comments.json)
-          echo "🔁 Number of @minhnt3 mentions: $MENTION_COUNT"
+          # Count mentions of @REVIEWER_USERNAME in all comments
+          MENTION_COUNT=$(jq --arg mention "$MENTION_PATTERN" '[.[] | select(.body | test($mention))] | length' all_comments.json)
+          echo "🔁 Number of $MENTION_PATTERN mentions: $MENTION_COUNT"
 
-          # Output detailed list (optional)
-          echo "=== Root Comments ==="
-          jq -r '.[] |
-            "- Author: \(.user.login)
-               File: \(.path)
-               Line: \(.line)
-               Comment: \(.body)\n"
-          ' root_comments.json
-
-          # Fail or pass CI based on condition
+          # Fail/pass condition
           if [ "$MENTION_COUNT" -lt "$ROOT_COUNT" ]; then
-            echo "❌ Not enough @minhnt3 mentions for review comments."
+            echo "❌ Not enough $MENTION_PATTERN mentions for $ROOT_COUNT root comments."
             exit 1
           else
-            echo "✅ All root comments are mentioned appropriately."
+            echo "✅ All root comments are properly mentioned."
           fi
