@@ -1,75 +1,23 @@
-name: Check Comment Replies
+name: List PR Comments
 
 on:
   pull_request:
     types: [opened, edited, synchronize]
-  issue_comment:
-    types: [created, edited]
 
 jobs:
-  check-replies:
+  list-comments:
     runs-on: ubuntu-latest
-    permissions:
-      issues: read
-      pull-requests: read
     steps:
-      - name: ✨ Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: 📝 Install Dependencies
-        run: pip install requests
-
-      - name: ⚡️ Analyze Comments and Mentions
+      - name: 🧾 Get PR Comments
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          import os
-          import re
-          import requests
-          from collections import defaultdict
-
-          headers = {
-              "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-              "Accept": "application/vnd.github+json"
-          }
-
-          repo = os.environ['GITHUB_REPOSITORY']
-          pr_number = os.environ.get('GITHUB_REF').split('/')[-1]
-          api_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          echo "Fetching comments for PR #$PR_NUMBER..."
           
-          r = requests.get(api_url, headers=headers)
-          comments = r.json()
-
-          comment_count = defaultdict(int)
-          mention_count = defaultdict(int)
-          mention_fixed = defaultdict(list)
-
-          for comment in comments:
-              author = comment['user']['login']
-              body = comment['body']
-              comment_count[author] += 1
-
-              mentions = re.findall(r'@([a-zA-Z0-9_-]+)', body)
-              for m in mentions:
-                  mention_count[m] += 1
-                  if 'fixed' in body.lower():
-                      hashes = re.findall(r'\b[0-9a-f]{7,40}\b', body)
-                      if hashes:
-                          mention_fixed[m].append(hashes[0])
-
-          print("| User | #Comments | #Mentioned | Valid Reply | Commit Hash (if fixed) |")
-          print("|------|-----------|------------|--------------|------------------------|")
-          all_users = set(comment_count) | set(mention_count)
-          for user in all_users:
-              cc = comment_count.get(user, 0)
-              mc = mention_count.get(user, 0)
-              valid = '✅' if mc >= cc else '❌'
-              fixed_hash = ', '.join(mention_fixed.get(user, []))
-              print(f"| {user} | {cc} | {mc} | {valid} | {fixed_hash or '-'} |")
-
-          # Optional fail if someone not replied
-          for user in comment_count:
-              if mention_count.get(user, 0) < comment_count[user]:
-                  raise SystemExit(f"User {user} has not been replied to enough times.")
+          gh api repos/${{ github.repository }}/issues/$PR_NUMBER/comments \
+            --paginate \
+            --jq '.[] | "- Author: \(.user.login)\n  Comment: \(.body)\n"' > pr_comments.txt
+          
+          echo "=== All Comments ==="
+          cat pr_comments.txt

@@ -1,4 +1,4 @@
-name: Check Issue Project Status
+name: Check Issue Status in Project
 
 on:
   pull_request:
@@ -7,78 +7,81 @@ on:
 jobs:
   verify-issue-status:
     runs-on: ubuntu-latest
-
     env:
-      GH_TOKEN: ${{ secrets.PROJECT_PAT }}
-      PROJECT_ID: "PVT_kwHOBZLEic4A6UIE"        # Update this
-      FIELD_ID: "PVTSSF_lAHOBZLEic4A6UIEzgu8fD0"       # Update this
-      OPTION_ID_CODE_REVIEW: "34aa8716"             # Update this for "Code Review"
-
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # hoặc dùng secrets.PROJECT_PAT nếu cần scope rộng hơn
     steps:
-      - name: 🔍 Extract Issue Numbers from PR Description
+      - name: 🔍 Extract Issue Numbers from Description
         id: extract
         run: |
-          ISSUE_LINE=$(echo "${{ github.event.pull_request.body }}" | awk '/## Issue/{flag=1;next}/##/{flag=0}flag')
-          echo "Found issue line: $ISSUE_LINE"
-          ISSUES=$(echo "$ISSUE_LINE" | grep -oE '#[0-9]+' | tr -d '#')
+          ISSUE_SECTION=$(echo "${{ github.event.pull_request.body }}" | awk '/## Issue/{flag=1;next}/##/{flag=0}flag')
+          echo "Found issue section:"
+          echo "$ISSUE_SECTION"
+
+          # Extract only valid #number
+          ISSUES=$(echo "$ISSUE_SECTION" | grep -oE '#[0-9]+' | tr -d '#' | tr '\n' ' ')
           echo "issues=$ISSUES" >> $GITHUB_OUTPUT
 
-      - name: 🧪 Validate Issue Status = Code Review
+      - name: 🧪 Check issue statuses in Project
+        env:
+          PROJECT_ID: "PVT_xxx" # 🔁 Thay bằng project ID thực tế
+          FIELD_NAME: "Status"
+          EXPECTED_OPTION_ID: "xxxxxx" # 🔁 Thay bằng option ID của trạng thái 'Code Review'
         run: |
-          PROJECT_ID="$PROJECT_ID"
-          FIELD_ID="$FIELD_ID"
-          OPTION_ID="$OPTION_ID_CODE_REVIEW"
-          FAILED=0
+          ISSUES="${{ steps.extract.outputs.issues }}"
+          echo "Checking issues: $ISSUES"
 
-          for issue in ${{ steps.extract.outputs.issues }}; do
-            ITEM_ID=$(gh api graphql -f query="
-            {
-              node(id: \"$PROJECT_ID\") {
-                ... on ProjectV2 {
-                  items(first: 100) {
-                    nodes {
-                      id
-                      content {
-                        ... on Issue {
-                          number
+          RESPONSE=$(gh api graphql -f query='
+          {
+            node(id: "'$PROJECT_ID'") {
+              ... on ProjectV2 {
+                items(first: 100) {
+                  nodes {
+                    id
+                    content {
+                      ... on Issue {
+                        number
+                      }
+                    }
+                    fieldValues(first: 10) {
+                      nodes {
+                        ... on ProjectV2ItemFieldSingleSelectValue {
+                          field {
+                            ... on ProjectV2SingleSelectField {
+                              name
+                            }
+                          }
+                          optionId
                         }
                       }
                     }
                   }
                 }
               }
-            }" | jq -r ".data.node.items.nodes[] | select(.content.number == $issue) | .id")
+            }
+          }')
 
-            if [ -z "$ITEM_ID" ]; then
-              echo "❌ Issue #$issue not found in project"
-              FAILED=1
-              continue
-            fi
+          FAILED=0
 
-            STATUS_OPTION_ID=$(gh api graphql -f query="
-            {
-              node(id: \"$PROJECT_ID\") {
-                ... on ProjectV2 {
-                  item(id: \"$ITEM_ID\") {
-                    fieldValueByName(name: \"Status\") {
-                      ... on ProjectV2ItemFieldSingleSelectValue {
-                        optionId
-                      }
-                    }
-                  }
-                }
-              }
-            }" | jq -r '.data.node.item.fieldValueByName.optionId')
+          for issue in $ISSUES; do
+            echo "🔎 Checking issue #$issue"
+            OPTION_ID=$(echo "$RESPONSE" | jq -r --arg num "$issue" --arg fname "$FIELD_NAME" '
+              .data.node.items.nodes[]
+              | select(.content.number == ($num | tonumber))
+              | .fieldValues.nodes[]
+              | select(.field.name == $fname)
+              | .optionId')
 
-            if [ "$STATUS_OPTION_ID" != "$OPTION_ID" ]; then
-              echo "❌ Issue #$issue is not in 'Code Review'."
-              FAILED=1
+            if [[ "$OPTION_ID" == "$EXPECTED_OPTION_ID" ]]; then
+              echo "✅ Issue #$issue is in '$FIELD_NAME: Code Review'"
             else
-              echo "✅ Issue #$issue is in 'Code Review'"
+              echo "❌ Issue #$issue is not in expected status. Found option ID: $OPTION_ID"
+              FAILED=1
             fi
           done
 
-          if [ "$FAILED" -eq 1 ]; then
-            echo "❗ One or more issues are not in the 'Code Review' status"
+          if [[ $FAILED -eq 1 ]]; then
+            echo "🔴 One or more issues are not in the required status."
             exit 1
+          else
+            echo "🟢 All issues are in 'Code Review'"
           fi
