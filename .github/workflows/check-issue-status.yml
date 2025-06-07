@@ -23,9 +23,9 @@ jobs:
 
       - name: 🧪 Check issue statuses in Project
         env:
-          PROJECT_ID: "PVT_xxx" # 🔁 Thay bằng project ID thực tế
+          PROJECT_ID: "PVT_kwHOBZLEic4A6UIE" # 🔁 Thay bằng project ID thực tế
           FIELD_NAME: "Status"
-          EXPECTED_OPTION_ID: "xxxxxx" # 🔁 Thay bằng option ID của trạng thái 'Code Review'
+          EXPECTED_OPTION_ID: "34aa8716" # 🔁 Thay bằng option ID của trạng thái 'Code Review'
         run: |
           ISSUES="${{ steps.extract.outputs.issues }}"
           echo "Checking issues: $ISSUES"
