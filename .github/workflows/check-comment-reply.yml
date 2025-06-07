@@ -16,27 +16,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
           MENTION_PATTERN="@${REVIEWER_USERNAME}"
-          echo "🔍 Checking comments for @$REVIEWER_USERNAME..."
 
-          # Fetch all review comments
-          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+          # Lấy PR author
+          PR_AUTHOR=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.user.login')
+          echo "👤 PR Author: $PR_AUTHOR"
+
+          # Lấy tất cả review comments
+          gh api repos/$REPO/pulls/$PR_NUMBER/comments \
             --paginate \
             > all_comments.json
 
-          # Filter root comments (non-replies)
-          jq '[.[] | select(.in_reply_to_id == null)]' all_comments.json > root_comments.json
+          # Lọc comment gốc KHÔNG phải từ PR author
+          jq --arg author "$PR_AUTHOR" '[.[] | select(.in_reply_to_id == null and .user.login != $author)]' all_comments.json > root_comments.json
           ROOT_COUNT=$(jq length root_comments.json)
-          echo "🔢 Total Root Review Comments: $ROOT_COUNT"
+          echo "🔢 Total Root Review Comments (excluding PR author): $ROOT_COUNT"
 
-          # Count mentions of @REVIEWER_USERNAME in all comments
+          # Đếm số lần mention reviewer
           MENTION_COUNT=$(jq --arg mention "$MENTION_PATTERN" '[.[] | select(.body | test($mention))] | length' all_comments.json)
           echo "🔁 Number of $MENTION_PATTERN mentions: $MENTION_COUNT"
 
-          # Fail/pass condition
+          # So sánh
           if [ "$MENTION_COUNT" -lt "$ROOT_COUNT" ]; then
             echo "❌ Not enough $MENTION_PATTERN mentions for $ROOT_COUNT root comments."
             exit 1
           else
-            echo "✅ All root comments are properly mentioned."
+            echo "✅ All root comments (excluding PR author) are properly mentioned."
           fi
