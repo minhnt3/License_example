@@ -1,4 +1,4 @@
-name: List All PR Comments
+name: List All PR Comments and Count Mentions
 
 on:
   pull_request:
@@ -8,21 +8,42 @@ jobs:
   list-comments:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Get all review comments (code-specific)
+      - name: Get all review comments (code-specific) and count mentions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
           echo "Fetching review comments for PR #$PR_NUMBER..."
-          
+
+          # Get review comments only
           gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
             --paginate \
-            --jq '.[] | 
-              "- Author: \(.user.login)
-                 File: \(.path)
-                 Line: \(.line)
-                 In-Reply-To: \(.in_reply_to_id // "None")
-                 Comment: \(.body)\n"' > review_comments.txt
-          
+            --jq '
+              map({
+                author: .user.login,
+                body: .body,
+                path: .path,
+                line: .line,
+                in_reply_to_id: .in_reply_to_id
+              })
+            ' > raw_comments.json
+
+          # Save human-readable version
+          jq -r '.[] |
+            "- Author: \(.author)
+               File: \(.path)
+               Line: \(.line)
+               In-Reply-To: \(.in_reply_to_id // "None")
+               Comment: \(.body)\n"
+          ' raw_comments.json > review_comments.txt
+
           echo "=== Review Comments ==="
           cat review_comments.txt
+
+          # Count total comments
+          TOTAL_COMMENTS=$(jq length raw_comments.json)
+          echo "🔢 Total Review Comments: $TOTAL_COMMENTS"
+
+          # Count mentions of @minhnt3
+          MENTION_COUNT=$(jq '[.[] | select(.body | test("@minhnt3"))] | length' raw_comments.json)
+          echo "🔁 Number of @minhnt3 mentions: $MENTION_COUNT"
