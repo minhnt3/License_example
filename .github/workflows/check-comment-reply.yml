@@ -1,28 +1,35 @@
-name: List All PR Comments
+name: List Review Comments Only (Filtered)
 
 on:
   pull_request:
     types: [opened, edited, synchronize]
 
 jobs:
-  list-comments:
+  list-review-comments:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Get all review comments (code-specific)
+      - name: 🧾 Get PR Review Comments (exclude bots + general comments)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
           echo "Fetching review comments for PR #$PR_NUMBER..."
-          
+
           gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
             --paginate \
-            --jq '.[] | 
+            --jq '
+              map(select(
+                (.user.login != "coderabbitai[bot]") and 
+                (.user.login != "Copilot") and 
+                (.path != null) and 
+                (.line != null)
+              )) |
+              .[] |
               "- Author: \(.user.login)
                  File: \(.path)
                  Line: \(.line)
-                 In-Reply-To: \(.in_reply_to_id // "None")
-                 Comment: \(.body)\n"' > review_comments.txt
-          
-          echo "=== Review Comments ==="
-          cat review_comments.txt
+                 Comment: \(.body)\n"
+            ' > review_comments_filtered.txt
+
+          echo "=== Filtered Review Comments ==="
+          cat review_comments_filtered.txt
