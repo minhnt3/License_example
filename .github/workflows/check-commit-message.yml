@@ -1,0 +1,44 @@
+name: Check All Commit Messages
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  check-commit-messages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # get full commit history
+
+      - name: 🔍 Validate all commit messages
+        run: |
+          echo "🔍 Getting all commits in PR..."
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+
+          COMMITS=$(git log --pretty=format:"%H" $BASE_SHA..$HEAD_SHA)
+
+          echo "🔎 Validating commit messages..."
+          for COMMIT in $COMMITS; do
+            MSG=$(git log -1 --pretty=format:"%s" $COMMIT)
+            echo "🔸 Commit: $COMMIT"
+            echo "📝 Message: $MSG"
+
+            # Skip merge commits
+            if [[ "$MSG" == Merge* ]]; then
+              echo "↪️ Skipping merge commit"
+              continue
+            fi
+
+            if [[ ! "$MSG" =~ ^(feat|fix|chore|refactor|package):\ .+ ]]; then
+              echo "❌ Invalid commit message format in commit $COMMIT"
+              echo "✅ Expected format: 'type: description' (e.g. 'feat: add login form')"
+              exit 1
+            fi
+          done
+
+          echo "✅ All commit messages are valid"
